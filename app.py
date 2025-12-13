@@ -1,65 +1,56 @@
 """
-Streamlit App: Airbnb Listing Strategy Optimizer (Boston)
+Streamlit App: Staffing Optimization Engine
 
 Demo-optimized version:
-- Locked to bundled dataset (no uploads)
-- Limits optimization universe for fast execution
-- Caches heavy computations
-- Disables expensive frontier by default
+- Locked to bundled dataset (no file uploads)
+- Hourly staffing optimization
+- Cost minimization under demand coverage constraints
+- Designed for fast, reliable Streamlit deployment
 
-Purpose: Demonstrate prescriptive analytics clearly and reliably.
+Purpose: Demonstrate prescriptive analytics for workforce planning.
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 
-from data import (
-    load_airbnb_data,
-    compute_expected_revenue,
-    compute_revenue_risk,
-    compute_covariance_matrix,
-    get_portfolio_statistics,
-    compute_risk_contribution
-)
-
-from optimizer_scipy import (
-    optimize_portfolio,
-    generate_efficient_frontier
-)
+from optimizer_scipy import optimize_staffing
 
 # --------------------------------------------------
 # PAGE CONFIG
 # --------------------------------------------------
 st.set_page_config(
-    page_title="Airbnb Listing Strategy Optimizer (Boston)",
-    page_icon="🏡",
+    page_title="Staffing Optimization Engine",
+    page_icon="🧑‍💼",
     layout="wide"
 )
 
 # --------------------------------------------------
 # APP HEADER
 # --------------------------------------------------
-st.title("🏡 Airbnb Listing Strategy Optimizer")
+st.title("🧑‍💼 Staffing Optimization Engine")
 st.markdown(
     """
     **Prescriptive Analytics Demo**
 
-    This application demonstrates how portfolio optimization techniques
-    can be applied to **Airbnb listing strategy in Boston** — helping hosts
-    prioritize listings to maximize expected revenue while managing demand risk
-    under limited operational capacity.
+    This application demonstrates how optimization can be used to generate
+    **cost-optimal hourly staffing plans** based on historical demand.
+    The model guarantees demand coverage while minimizing total labor cost.
     """
 )
 
 # --------------------------------------------------
 # DATA SOURCE (LOCKED)
 # --------------------------------------------------
-DATA_PATH = "data/listings.csv"
+DATA_PATH = "data/cafe_hourly_demand_3months.csv"
 
 @st.cache_data(show_spinner=False)
 def load_data(path: str) -> pd.DataFrame:
-    return load_airbnb_data(path)
+    df = pd.read_csv(path)
+    df["date"] = pd.to_datetime(df["date"])
+    df["hour"] = pd.to_numeric(df["hour"])
+    df["time_bucket"] = df["date"] + pd.to_timedelta(df["hour"], unit="h")
+    return df.sort_values("time_bucket").reset_index(drop=True)
 
 try:
     df = load_data(DATA_PATH)
@@ -70,217 +61,21 @@ except FileNotFoundError:
     )
     st.stop()
 
-st.info(f"Using bundled Boston Airbnb dataset ({len(df):,} listings)")
+st.info(f"Using bundled staffing dataset ({len(df):,} hourly records)")
 
 # --------------------------------------------------
-# SIDEBAR INPUTS
+# SIDEBAR ASSUMPTIONS
 # --------------------------------------------------
-st.sidebar.header("⚙️ Optimization Settings")
+st.sidebar.header("⚙️ Model Assumptions")
 
-max_listings = st.sidebar.slider(
-    "Maximum Active Listings",
-    min_value=1,
-    max_value=20,
-    value=5,
-    step=1,
-    help="Operational capacity constraint"
+productivity = st.sidebar.number_input(
+    "Customers per staff per hour",
+    min_value=1.0,
+    value=8.0,
+    step=1.0,
+    help="Operational productivity assumption"
 )
 
-risk_tolerance = st.sidebar.slider(
-    "Risk Tolerance",
-    min_value=0.1,
-    max_value=1.0,
-    value=0.5,
-    step=0.05,
-    help="Higher values allow higher demand uncertainty"
-)
-
-show_frontier = st.sidebar.checkbox(
-    "Show Revenue–Risk Frontier (slow)",
-    value=False
-)
-
-optimize_button = st.sidebar.button(
-    "🚀 Optimize Listing Strategy",
-    type="primary"
-)
-
-# --------------------------------------------------
-# DEMO MODE: LIMIT OPTIMIZATION SIZE
-# --------------------------------------------------
-MAX_LISTINGS_OPT = 100  # critical for speed & reliability
-
-df["expected_revenue"] = df["price"] * (365 - df["availability_365"])
-
-df_opt = (
-    df.sort_values("expected_revenue", ascending=False)
-      .head(MAX_LISTINGS_OPT)
-      .reset_index(drop=True)
-)
-
-# --------------------------------------------------
-# DATA PREVIEW
-# --------------------------------------------------
-st.subheader("📄 Boston Airbnb Listings (Top Revenue Candidates)")
-st.dataframe(
-    df_opt[
-        ["neighbourhood", "room_type", "price", "availability_365"]
-    ].head(20),
-    use_container_width=True
-)
-
-# --------------------------------------------------
-# CACHE HEAVY METRICS
-# --------------------------------------------------
-@st.cache_data(show_spinner=False)
-def compute_metrics(df: pd.DataFrame):
-    expected_returns = compute_expected_revenue(df)
-    risk = compute_revenue_risk(df)
-    cov_matrix = compute_covariance_matrix(expected_returns, risk)
-    return expected_returns, risk, cov_matrix
-
-# --------------------------------------------------
-# RUN OPTIMIZATION
-# --------------------------------------------------
-if optimize_button:
-
-    st.markdown("## 🚀 Optimization Results")
-
-    with st.spinner("Running optimization model..."):
-
-        expected_returns, risk, cov_matrix = compute_metrics(df_opt)
-
-        # Allocation bounds from capacity constraint
-        min_weight = 0.0
-        max_weight = 1.0 / max_listings
-
-        # Risk-adjusted revenue target (percentile-based)
-        target_return = np.percentile(
-            expected_returns,
-            int(risk_tolerance * 100)
-        )
-
-        weights, result = optimize_portfolio(
-            expected_returns,
-            cov_matrix,
-            target_return,
-            min_weight,
-            max_weight
-        )
-
-    if not result.get("success", False):
-        st.error("Optimization failed. Try adjusting constraints.")
-        st.stop()
-
-    # --------------------------------------------------
-    # PORTFOLIO STATISTICS
-    # --------------------------------------------------
-    portfolio_stats = get_portfolio_statistics(
-        weights,
-        expected_returns,
-        cov_matrix
-    )
-
-    st.subheader("📊 Optimization Summary")
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric(
-        "Expected Annual Revenue",
-        f"${portfolio_stats['return']:,.0f}"
-    )
-    col2.metric(
-        "Revenue Risk",
-        f"{portfolio_stats['risk']:,.0f}"
-    )
-    col3.metric(
-        "Active Listings",
-        max_listings
-    )
-
-    # --------------------------------------------------
-    # OPTIMIZED LISTINGS
-    # --------------------------------------------------
-    st.subheader("✅ Optimized Listing Recommendations")
-    st.caption("Only listings with non-zero allocation selected by the optimizer are shown.")
-
-    results_df = df_opt.copy()
-    results_df["Allocation %"] = (weights * 100).round(2)
-
-    results_df = (
-        results_df[results_df["Allocation %"] > 0.01]
-        .sort_values("Allocation %", ascending=False)
-        .reset_index(drop=True)
-    )
-
-    st.info(
-        f"{len(results_df)} listings selected "
-        f"out of {len(df_opt)} candidates "
-        f"under the current capacity constraint."
-    )
-
-    st.dataframe(
-        results_df[
-            [
-                "neighbourhood",
-                "room_type",
-                "price",
-                "availability_365",
-                "Allocation %"
-            ]
-        ],
-        use_container_width=True
-    )
-
-    # --------------------------------------------------
-    # RISK CONTRIBUTION
-    # --------------------------------------------------
-    st.subheader("⚠️ Revenue Risk Contribution by Listing")
-
-    risk_contrib = compute_risk_contribution(weights, cov_matrix)
-
-    risk_df = results_df.copy()
-    risk_df["Risk Contribution"] = risk_contrib[
-        results_df.index
-    ]
-
-    st.dataframe(
-        risk_df[
-            ["neighbourhood", "room_type", "Risk Contribution"]
-        ].sort_values(
-            "Risk Contribution",
-            ascending=False
-        ),
-        use_container_width=True
-    )
-
-    # --------------------------------------------------
-    # OPTIONAL: EFFICIENT FRONTIER
-    # --------------------------------------------------
-    if show_frontier:
-
-        st.subheader("📈 Revenue–Risk Efficient Frontier")
-
-        frontier = generate_efficient_frontier(
-            expected_returns,
-            cov_matrix,
-            n_points=20,
-            min_weight=min_weight,
-            max_weight=max_weight
-        )
-
-        if frontier:
-            frontier_df = pd.DataFrame(frontier)
-
-            st.line_chart(
-                frontier_df.set_index("risk")["return"],
-                height=400
-            )
-
-# --------------------------------------------------
-# FOOTER
-# --------------------------------------------------
-st.markdown("---")
-st.caption(
-    "Built for ISOM 839 – Prescriptive Analytics | "
-    "Boston Airbnb Dataset | SciPy Optimization | Demo Mode"
-)
+service_buffer = st.sidebar.slider(
+    "Service buffer",
+    min_value=_
