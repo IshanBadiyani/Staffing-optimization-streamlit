@@ -96,6 +96,9 @@ This project demonstrates how optimization models can be operationalized into de
 
 **Author:** Ishan Badiyani  
 **LinkedIn:** https://www.linkedin.com/in/your-link](https://www.linkedin.com/in/ishanbadiyani/  
+
+**Loom Video**
+(https://www.loom.com/share/1d427f3f2e074d4eab367ba0cd8c324a)
  
 
 ---
