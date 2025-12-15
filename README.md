@@ -26,8 +26,7 @@ The result is a decision-support tool that does not just analyze the past—but 
 
 ## 🚀 Live Demo
 
-**[Try it here →](https://your-streamlit-app-url)**  
-*(Replace with your deployed Streamlit URL)*
+**(https://staffing-optimization-app-2zgpbwpshm3kehohucfc4d.streamlit.app/)**  
 
 ---
 
